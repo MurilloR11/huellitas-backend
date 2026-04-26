@@ -16,10 +16,12 @@ def create_app(config_class=Config) -> Flask:
     _configure_logging(app)
     init_extensions(app)
 
+    from app.features.auth.routes import auth_bp
     from app.features.foundations.routes import foundations_bp
     from app.features.pets.routes import pets_bp
     from app.features.adoptions.routes import adoptions_bp
 
+    app.register_blueprint(auth_bp)
     app.register_blueprint(foundations_bp)
     app.register_blueprint(pets_bp)
     app.register_blueprint(adoptions_bp)
