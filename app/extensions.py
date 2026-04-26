@@ -24,7 +24,7 @@ def init_extensions(app) -> None:
     limiter.init_app(app)
     CORS(
         app,
-        origins=[app.config.get("FRONTEND_URL", "http://localhost:5173")],
+        origins=app.config.get("CORS_ORIGINS", ["http://localhost:5173"]),
         allow_headers=["Authorization", "Content-Type"],
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         supports_credentials=True,

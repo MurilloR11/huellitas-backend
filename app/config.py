@@ -19,7 +19,16 @@ class Config:
     SUPABASE_JWT_SECRET: str = os.environ.get("SUPABASE_JWT_SECRET", "")
     EMAIL_API_KEY: str = os.environ.get("EMAIL_API_KEY", "")
     EMAIL_FROM: str = os.environ.get("EMAIL_FROM", "Huellitas <noreply@huellitas.app>")
-    FRONTEND_URL: str = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+    FRONTEND_URL: str = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+    CORS_ORIGINS: list = [
+        o.strip().rstrip("/")
+        for o in os.environ.get(
+            "CORS_ORIGINS",
+            os.environ.get("FRONTEND_URL", "http://localhost:5173")
+            + ",http://localhost:5173,http://localhost:3000",
+        ).split(",")
+        if o.strip()
+    ]
     RATELIMIT_STORAGE_URI: str = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
     TESTING: bool = False
 
