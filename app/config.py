@@ -7,7 +7,8 @@ _REQUIRED = (
     "SUPABASE_URL",
     "SUPABASE_SERVICE_ROLE_KEY",
     "SUPABASE_JWT_SECRET",
-    "EMAIL_API_KEY",
+    "SMTP_USER",
+    "SMTP_PASSWORD",
 )
 
 
@@ -19,6 +20,10 @@ class Config:
     SUPABASE_JWT_SECRET: str = os.environ.get("SUPABASE_JWT_SECRET", "")
     EMAIL_API_KEY: str = os.environ.get("EMAIL_API_KEY", "")
     EMAIL_FROM: str = os.environ.get("EMAIL_FROM", "Huellitas <noreply@huellitas.app>")
+    SMTP_HOST: str = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    SMTP_PORT: int = int(os.environ.get("SMTP_PORT", "587"))
+    SMTP_USER: str = os.environ.get("SMTP_USER", "")
+    SMTP_PASSWORD: str = os.environ.get("SMTP_PASSWORD", "")
     FRONTEND_URL: str = os.environ.get("FRONTEND_URL", "http://localhost:5173")
     CORS_ORIGINS: list = [
         o.strip().rstrip("/")
