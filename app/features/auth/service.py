@@ -6,7 +6,7 @@ def get_profile(user_id: str) -> dict | None:
 
     result = (
         db.table("profiles")
-        .select("id, email, full_name, role, avatar_url")
+        .select("id, email, full_name, role")
         .eq("id", user_id)
         .execute()
     )
