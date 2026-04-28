@@ -24,7 +24,11 @@ def _decode_token(token: str) -> dict:
 
     jwks = get_jwks_client()
     if jwks is not None:
-        signing_key = jwks.get_signing_key_from_jwt(token)
+        try:
+            signing_key = jwks.get_signing_key_from_jwt(token)
+        except Exception as exc:
+            # Network error, key not in JWKS, algorithm mismatch, etc.
+            raise jwt.InvalidTokenError(f"JWKS lookup failed: {exc}") from exc
         return jwt.decode(
             token,
             signing_key.key,
@@ -74,7 +78,26 @@ def _load_user(token: str) -> tuple[dict | None, tuple | None]:
 
     rows = result.data or []
     if not rows:
-        return None, (jsonify({"error": "User not found"}), 401)
+        # Profile missing — the Supabase trigger may have failed at sign-up.
+        # Auto-create it from JWT claims so the user isn't permanently locked out.
+        try:
+            from app.extensions import get_db as _get_db
+            meta = payload.get("user_metadata") or {}
+            role_raw = meta.get("role", "ciudadano")
+            # Mirror the trigger: prevent self-assignment of admin role.
+            if role_raw not in ("ciudadano", "fundacion", "developer"):
+                role_raw = "ciudadano"
+            _get_db().table("profiles").insert({
+                "id": user_id,
+                "email": payload.get("email") or meta.get("email", ""),
+                "full_name": meta.get("full_name", ""),
+                "role": role_raw,
+            }).execute()
+            rows = [{"role": role_raw}]
+            logger.warning("Auto-created missing profile for user_id=%s role=%s", user_id, role_raw)
+        except Exception:
+            logger.exception("Failed to auto-create profile for user_id=%s", user_id)
+            return None, (jsonify({"error": "User not found"}), 401)
 
     return {"user_id": user_id, "role": rows[0].get("role")}, None
 
