@@ -20,11 +20,13 @@ def create_app(config_class=Config) -> Flask:
     from app.features.foundations.routes import foundations_bp
     from app.features.pets.routes import pets_bp
     from app.features.adoptions.routes import adoptions_bp
+    from app.features.ai.routes import ai_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(foundations_bp)
     app.register_blueprint(pets_bp)
     app.register_blueprint(adoptions_bp)
+    app.register_blueprint(ai_bp)
 
     @app.errorhandler(404)
     def not_found(_e):
