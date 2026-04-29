@@ -1,7 +1,4 @@
 import logging
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 import resend
 from flask import current_app
@@ -22,21 +19,6 @@ def _send(to: str, subject: str, html: str) -> None:
             "html": html,
         }
     )
-
-
-def _send_smtp(to: str, subject: str, html: str) -> None:
-    cfg = current_app.config
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = cfg["SMTP_USER"]
-    msg["To"] = to
-    msg.attach(MIMEText(html, "html"))
-
-    with smtplib.SMTP(cfg["SMTP_HOST"], cfg["SMTP_PORT"]) as server:
-        server.ehlo()
-        server.starttls()
-        server.login(cfg["SMTP_USER"], cfg["SMTP_PASSWORD"])
-        server.sendmail(cfg["SMTP_USER"], to, msg.as_string())
 
 
 # ---------------------------------------------------------------------------
@@ -264,4 +246,4 @@ def send_password_reset_otp(to_email: str, otp: str) -> None:
 </body>
 </html>
 """
-    _send_smtp(to_email, "Código de verificación — Huellitas", html)
+    _send(to_email, "Código de verificación — Huellitas", html)
