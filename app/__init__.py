@@ -1,9 +1,19 @@
 import logging
 import logging.config
+import os
+import sentry_sdk
+from sentry_sdk.integrations.flask import FlaskIntegration
 from flask import Flask, jsonify
 
 from app.config import Config
 from app.extensions import init_extensions
+
+sentry_sdk.init(
+    dsn=os.environ.get("SENTRY_DSN"),
+    integrations=[FlaskIntegration()],
+    traces_sample_rate=0.2 if os.environ.get("FLASK_DEBUG") != "true" else 1.0,
+    environment="development" if os.environ.get("FLASK_DEBUG") == "true" else "production",
+)
 
 
 def create_app(config_class=Config) -> Flask:
