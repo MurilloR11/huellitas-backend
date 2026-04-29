@@ -18,7 +18,8 @@ def _send(to: str, subject: str, html: str) -> None:
         html_content=html,
     )
     sg = SendGridAPIClient(current_app.config["SENDGRID_API_KEY"])
-    sg.send(message)
+    response = sg.send(message)
+    logger.info("SendGrid response: status=%s to=%s", response.status_code, to)
 
 
 # ---------------------------------------------------------------------------
