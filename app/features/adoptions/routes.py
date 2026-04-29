@@ -12,7 +12,7 @@ adoptions_bp = Blueprint("adoptions", __name__, url_prefix="/adoptions")
 
 
 @adoptions_bp.post("")
-@limiter.limit("20 per minute")
+@limiter.limit("5 per hour")
 @require_auth
 def create_adoption():
     body = request.get_json(silent=True) or {}

@@ -4,6 +4,7 @@ import os
 import sentry_sdk
 from sentry_sdk.integrations.flask import FlaskIntegration
 from flask import Flask, jsonify
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.config import Config
 from app.extensions import init_extensions
@@ -18,6 +19,7 @@ sentry_sdk.init(
 
 def create_app(config_class=Config) -> Flask:
     app = Flask(__name__)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     app.config.from_object(config_class)
 
     if not app.config.get("TESTING"):
