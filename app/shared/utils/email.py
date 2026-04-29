@@ -1,6 +1,7 @@
 import logging
 
-import resend
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 from flask import current_app
 
 logger = logging.getLogger(__name__)
@@ -10,15 +11,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def _send(to: str, subject: str, html: str) -> None:
-    resend.api_key = current_app.config["EMAIL_API_KEY"]
-    resend.Emails.send(
-        {
-            "from": current_app.config["EMAIL_FROM"],
-            "to": [to],
-            "subject": subject,
-            "html": html,
-        }
+    message = Mail(
+        from_email=current_app.config["EMAIL_FROM"],
+        to_emails=to,
+        subject=subject,
+        html_content=html,
     )
+    sg = SendGridAPIClient(current_app.config["SENDGRID_API_KEY"])
+    sg.send(message)
 
 
 # ---------------------------------------------------------------------------
