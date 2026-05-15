@@ -196,6 +196,70 @@ def verify_backup_code(user_id: str, code: str) -> bool:
     return True
 
 
+def generate_access_key(user_id: str) -> str:
+    db = get_db()
+    plain_key = secrets.token_hex(32)
+    db.table("access_keys").upsert(
+        {
+            "user_id": user_id,
+            "key_hash": _hash_code(plain_key),
+            "created_at": _now().isoformat(),
+            "last_used_at": None,
+        },
+        on_conflict="user_id",
+    ).execute()
+    return plain_key
+
+
+def get_access_key_status(user_id: str) -> dict:
+    db = get_db()
+    result = db.table("access_keys").select("created_at").eq("user_id", user_id).execute()
+    rows = result.data or []
+    if not rows:
+        return {"has_key": False, "created_at": None}
+    return {"has_key": True, "created_at": rows[0]["created_at"]}
+
+
+def revoke_access_key(user_id: str) -> None:
+    db = get_db()
+    db.table("access_keys").delete().eq("user_id", user_id).execute()
+
+
+def login_with_access_key(user_id: str, plain_key: str) -> dict | None:
+    db = get_db()
+    key_hash = _hash_code(plain_key.strip())
+
+    result = db.table("access_keys").select("id, key_hash").eq("user_id", user_id).execute()
+    rows = result.data or []
+    if not rows or rows[0]["key_hash"] != key_hash:
+        return None
+
+    db.table("access_keys").update({"last_used_at": _now().isoformat()}).eq("id", rows[0]["id"]).execute()
+
+    profile_result = db.table("profiles").select("email").eq("id", user_id).execute()
+    profile_rows = profile_result.data or []
+    if not profile_rows:
+        return None
+    email = profile_rows[0]["email"]
+
+    url = current_app.config["SUPABASE_URL"]
+    svc_key = current_app.config["SUPABASE_SERVICE_ROLE_KEY"]
+    headers = {
+        "Authorization": f"Bearer {svc_key}",
+        "apikey": svc_key,
+        "Content-Type": "application/json",
+    }
+    resp = requests.post(
+        f"{url}/auth/v1/admin/generate_link",
+        headers=headers,
+        json={"type": "magiclink", "email": email},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return {"hashed_token": data["hashed_token"]}
+
+
 def get_profile(user_id: str) -> dict | None:
     db = get_db()
 

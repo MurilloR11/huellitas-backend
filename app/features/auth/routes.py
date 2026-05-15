@@ -105,6 +105,62 @@ def verify_backup_code():
         return jsonify({"error": "Internal server error"}), 500
 
 
+@auth_bp.post("/access-key/generate")
+@limiter.limit("5 per hour")
+@require_auth
+def generate_access_key():
+    try:
+        plain_key = service.generate_access_key(g.user_id)
+        return jsonify({"key": plain_key}), 201
+    except Exception:
+        logger.exception("Error generating access key for user %s", g.user_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@auth_bp.get("/access-key/status")
+@limiter.limit("30 per minute")
+@require_auth
+def access_key_status():
+    try:
+        status = service.get_access_key_status(g.user_id)
+        return jsonify(status), 200
+    except Exception:
+        logger.exception("Error fetching access key status for user %s", g.user_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@auth_bp.delete("/access-key")
+@limiter.limit("10 per minute")
+@require_auth
+def revoke_access_key():
+    try:
+        service.revoke_access_key(g.user_id)
+        return jsonify({"message": "Llave revocada"}), 200
+    except Exception:
+        logger.exception("Error revoking access key for user %s", g.user_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@auth_bp.post("/access-key/login")
+@limiter.limit("5 per hour")
+def login_with_access_key():
+    body = request.get_json(silent=True) or {}
+    user_id = (body.get("user_id") or "").strip()
+    plain_key = (body.get("key") or "").strip()
+
+    if not user_id or not plain_key:
+        return jsonify({"error": "user_id and key are required"}), 400
+
+    try:
+        result = service.login_with_access_key(user_id, plain_key)
+        if not result:
+            return jsonify({"error": "Llave inválida o no configurada"}), 401
+        return jsonify(result), 200
+    except Exception:
+        logger.exception("Error logging in with access key for user %s", user_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
 @auth_bp.post("/forgot-password")
 @limiter.limit("5 per minute")
 def forgot_password():
