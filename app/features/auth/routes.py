@@ -25,6 +25,18 @@ def me():
         return jsonify({"error": "Internal server error"}), 500
 
 
+@auth_bp.delete("/mfa/pending")
+@limiter.limit("10 per minute")
+@require_auth
+def clear_pending_mfa():
+    try:
+        deleted = service.delete_pending_mfa_factors(g.user_id)
+        return jsonify({"deleted": deleted}), 200
+    except Exception:
+        logger.exception("Error clearing pending MFA factors for user %s", g.user_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
 @auth_bp.post("/forgot-password")
 @limiter.limit("5 per minute")
 def forgot_password():

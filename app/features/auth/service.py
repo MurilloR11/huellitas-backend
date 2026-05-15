@@ -2,6 +2,9 @@ import random
 import secrets
 from datetime import datetime, timedelta, timezone
 
+import requests
+from flask import current_app
+
 from app.extensions import get_db
 
 OTP_TTL_MINUTES = 10
@@ -85,6 +88,33 @@ def reset_password(email: str, reset_token: str, new_password: str) -> bool:
     db.auth.admin.update_user_by_id(user_id, {"password": new_password})
     db.table("otp_store").delete().eq("email", email).execute()
     return True
+
+
+def delete_pending_mfa_factors(user_id: str) -> int:
+    """Delete all unverified TOTP factors for a user via the Supabase Admin API.
+    Returns the count of deleted factors."""
+    url = current_app.config["SUPABASE_URL"]
+    key = current_app.config["SUPABASE_SERVICE_ROLE_KEY"]
+    headers = {"Authorization": f"Bearer {key}", "apikey": key}
+
+    resp = requests.get(
+        f"{url}/auth/v1/admin/users/{user_id}/factors",
+        headers=headers,
+        timeout=10,
+    )
+    resp.raise_for_status()
+
+    deleted = 0
+    for factor in resp.json():
+        if factor.get("status") != "verified":
+            requests.delete(
+                f"{url}/auth/v1/admin/users/{user_id}/factors/{factor['id']}",
+                headers=headers,
+                timeout=10,
+            ).raise_for_status()
+            deleted += 1
+
+    return deleted
 
 
 def get_profile(user_id: str) -> dict | None:
