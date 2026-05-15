@@ -1,11 +1,25 @@
+import hashlib
 import random
 import secrets
+import string
 from datetime import datetime, timedelta, timezone
 
 import requests
 from flask import current_app
 
 from app.extensions import get_db
+
+BACKUP_CODES_COUNT = 10
+BACKUP_CODE_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz"  # sin 0/O/1/l/I
+
+
+def _hash_code(code: str) -> str:
+    return hashlib.sha256(code.encode()).hexdigest()
+
+
+def _generate_code() -> str:
+    segments = ["".join(secrets.choice(BACKUP_CODE_ALPHABET) for _ in range(4)) for _ in range(3)]
+    return "-".join(segments)
 
 OTP_TTL_MINUTES = 10
 
@@ -134,6 +148,52 @@ def delete_pending_mfa_factors(user_id: str) -> int:
             deleted += 1
 
     return deleted
+
+
+def generate_backup_codes(user_id: str) -> list[str]:
+    db = get_db()
+    db.table("backup_codes").delete().eq("user_id", user_id).execute()
+
+    plain_codes = [_generate_code() for _ in range(BACKUP_CODES_COUNT)]
+    rows = [{"user_id": user_id, "code_hash": _hash_code(c)} for c in plain_codes]
+    db.table("backup_codes").insert(rows).execute()
+    return plain_codes
+
+
+def get_backup_codes_status(user_id: str) -> dict:
+    db = get_db()
+    result = (
+        db.table("backup_codes")
+        .select("id, used_at")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    rows = result.data or []
+    total = len(rows)
+    remaining = sum(1 for r in rows if r["used_at"] is None)
+    return {"total": total, "remaining": remaining}
+
+
+def verify_backup_code(user_id: str, code: str) -> bool:
+    db = get_db()
+    code_hash = _hash_code(code.strip().lower())
+    result = (
+        db.table("backup_codes")
+        .select("id, used_at")
+        .eq("user_id", user_id)
+        .eq("code_hash", code_hash)
+        .execute()
+    )
+    rows = result.data or []
+    if not rows:
+        return False
+
+    entry = rows[0]
+    if entry["used_at"] is not None:
+        return False
+
+    db.table("backup_codes").update({"used_at": _now().isoformat()}).eq("id", entry["id"]).execute()
+    return True
 
 
 def get_profile(user_id: str) -> dict | None:

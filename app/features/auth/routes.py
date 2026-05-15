@@ -49,6 +49,62 @@ def clear_pending_mfa():
         return jsonify({"error": "Internal server error"}), 500
 
 
+@auth_bp.post("/backup-codes/generate")
+@limiter.limit("5 per minute")
+@require_auth
+def generate_backup_codes():
+    try:
+        codes = service.generate_backup_codes(g.user_id)
+        return jsonify({"codes": codes}), 201
+    except Exception:
+        logger.exception("Error generating backup codes for user %s", g.user_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@auth_bp.post("/backup-codes/regenerate")
+@limiter.limit("5 per minute")
+@require_auth
+def regenerate_backup_codes():
+    try:
+        codes = service.generate_backup_codes(g.user_id)
+        return jsonify({"codes": codes}), 200
+    except Exception:
+        logger.exception("Error regenerating backup codes for user %s", g.user_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@auth_bp.get("/backup-codes/status")
+@limiter.limit("30 per minute")
+@require_auth
+def backup_codes_status():
+    try:
+        status = service.get_backup_codes_status(g.user_id)
+        return jsonify(status), 200
+    except Exception:
+        logger.exception("Error fetching backup codes status for user %s", g.user_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@auth_bp.post("/backup-codes/verify")
+@limiter.limit("10 per minute")
+@require_auth
+def verify_backup_code():
+    body = request.get_json(silent=True) or {}
+    code = (body.get("code") or "").strip()
+
+    if not code:
+        return jsonify({"error": "code is required"}), 400
+
+    try:
+        ok = service.verify_backup_code(g.user_id, code)
+        if not ok:
+            return jsonify({"error": "Código inválido o ya utilizado"}), 400
+        return jsonify({"message": "Código válido"}), 200
+    except Exception:
+        logger.exception("Error verifying backup code for user %s", g.user_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
 @auth_bp.post("/forgot-password")
 @limiter.limit("5 per minute")
 def forgot_password():
