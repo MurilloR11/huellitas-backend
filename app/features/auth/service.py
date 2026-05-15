@@ -90,6 +90,25 @@ def reset_password(email: str, reset_token: str, new_password: str) -> bool:
     return True
 
 
+def get_verified_mfa_factor(user_id: str) -> dict | None:
+    """Return the first verified TOTP factor for a user, or None."""
+    url = current_app.config["SUPABASE_URL"]
+    key = current_app.config["SUPABASE_SERVICE_ROLE_KEY"]
+    headers = {"Authorization": f"Bearer {key}", "apikey": key}
+
+    resp = requests.get(
+        f"{url}/auth/v1/admin/users/{user_id}/factors",
+        headers=headers,
+        timeout=10,
+    )
+    resp.raise_for_status()
+
+    for factor in resp.json():
+        if factor.get("status") == "verified" and factor.get("factor_type") == "totp":
+            return {"id": factor["id"]}
+    return None
+
+
 def delete_pending_mfa_factors(user_id: str) -> int:
     """Delete all unverified TOTP factors for a user via the Supabase Admin API.
     Returns the count of deleted factors."""

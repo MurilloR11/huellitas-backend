@@ -25,6 +25,18 @@ def me():
         return jsonify({"error": "Internal server error"}), 500
 
 
+@auth_bp.get("/mfa/factor")
+@limiter.limit("30 per minute")
+@require_auth
+def get_mfa_factor():
+    try:
+        factor = service.get_verified_mfa_factor(g.user_id)
+        return jsonify({"id": factor["id"] if factor else None}), 200
+    except Exception:
+        logger.exception("Error fetching MFA factor for user %s", g.user_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
 @auth_bp.delete("/mfa/pending")
 @limiter.limit("10 per minute")
 @require_auth
