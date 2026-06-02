@@ -186,7 +186,7 @@ def _format_pet(row: dict) -> dict:
 
 
 _FOUNDATION_ADOPTION_SELECT = (
-    "id, pet_id, adopter_id, foundation_id, status, message, created_at, updated_at, "
+    "id, pet_id, adopter_id, foundation_id, status, message, form_data, created_at, updated_at, "
     "pets(name, photos), "
     "profiles!adoption_requests_adopter_id_fkey(full_name, email)"
 )
@@ -219,6 +219,7 @@ def _format_foundation_adoption(row: dict) -> dict:
         "foundation_id": row.get("foundation_id"),
         "status": row.get("status"),
         "message": row.get("message", ""),
+        "form_data": row.get("form_data"),
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
     }

@@ -11,6 +11,12 @@ logger = logging.getLogger(__name__)
 adoptions_bp = Blueprint("adoptions", __name__, url_prefix="/adoptions")
 
 
+_ALLOWED_FORM_KEYS = {
+    "phone", "city", "housing_type", "ownership",
+    "outdoor_space", "residents", "children", "current_pets", "prev_pets",
+}
+
+
 @adoptions_bp.post("")
 @limiter.limit("5 per hour")
 @require_auth
@@ -26,11 +32,17 @@ def create_adoption():
     if len(message) > 1000:
         return jsonify({"error": "message must be 1000 characters or fewer"}), 400
 
+    raw_form = body.get("form_data")
+    form_data = None
+    if isinstance(raw_form, dict):
+        form_data = {k: str(v)[:200] for k, v in raw_form.items() if k in _ALLOWED_FORM_KEYS}
+
     try:
         adoption = service.create_adoption(
             adopter_id=g.user_id,
             pet_id=pet_id,
             message=message,
+            form_data=form_data,
         )
         if adoption is None:
             return jsonify({"error": "Pet not found or not available"}), 404
@@ -40,7 +52,65 @@ def create_adoption():
         return jsonify({"error": "Internal server error"}), 500
 
 
+_ALLOWED_DOC_TYPES = {"doc_id", "doc_address", "doc_landlord"}
+_ALLOWED_DOC_MIME = {"application/pdf", "image/jpeg", "image/png", "image/webp"}
+
 _VALID_STATUSES = {"pending", "reviewing", "approved", "rejected", "completed"}
+
+
+@adoptions_bp.post("/<int:adoption_id>/documents")
+@limiter.limit("20 per hour")
+@require_auth
+def upload_document(adoption_id):
+    doc_type = request.form.get("doc_type", "").strip()
+    if doc_type not in _ALLOWED_DOC_TYPES:
+        return jsonify({"error": f"doc_type must be one of: {', '.join(sorted(_ALLOWED_DOC_TYPES))}"}), 400
+
+    if "file" not in request.files:
+        return jsonify({"error": "file is required"}), 400
+
+    f = request.files["file"]
+    if f.content_type not in _ALLOWED_DOC_MIME:
+        return jsonify({"error": "Only PDF, JPG, PNG, or WebP files are allowed"}), 400
+
+    data = f.read()
+    if len(data) > 5 * 1024 * 1024:
+        return jsonify({"error": "File too large (max 5 MB)"}), 400
+
+    try:
+        url = service.upload_adoption_document(
+            adoption_id=adoption_id,
+            adopter_id=g.user_id,
+            doc_type=doc_type,
+            file_bytes=data,
+            mime=f.content_type,
+        )
+        if url is None:
+            return jsonify({"error": "Adoption not found or access denied"}), 404
+        return jsonify({"url": url}), 201
+    except Exception:
+        logger.exception("Error uploading document for adoption %s", adoption_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@adoptions_bp.get("/by-code/<tracking_code>")
+@limiter.limit("60 per minute")
+@require_auth
+def get_by_tracking_code(tracking_code):
+    if g.user_role != "fundacion":
+        return jsonify({"error": "Forbidden"}), 403
+
+    try:
+        result = service.get_adoption_by_tracking_code(
+            tracking_code.upper().strip(),
+            foundation_id=g.user_id,
+        )
+        if result is None:
+            return jsonify({"error": "Código no encontrado o no pertenece a tu fundación"}), 404
+        return jsonify(result), 200
+    except Exception:
+        logger.exception("Error looking up tracking code %s", tracking_code)
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @adoptions_bp.patch("/<int:adoption_id>/status")
