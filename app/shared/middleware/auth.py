@@ -1,10 +1,27 @@
 import logging
+import time
 from functools import wraps
 
 import jwt
 from flask import g, jsonify, request, current_app
 
 logger = logging.getLogger(__name__)
+
+# In-memory role cache — avoids a DB round-trip on every authenticated request.
+# TTL of 60 s is short enough to pick up role changes quickly.
+_ROLE_CACHE: dict[str, tuple[str, float]] = {}
+_CACHE_TTL = 60.0
+
+
+def _get_cached_role(user_id: str) -> str | None:
+    entry = _ROLE_CACHE.get(user_id)
+    if entry and time.monotonic() < entry[1]:
+        return entry[0]
+    return None
+
+
+def _set_cached_role(user_id: str, role: str) -> None:
+    _ROLE_CACHE[user_id] = (role, time.monotonic() + _CACHE_TTL)
 
 
 def _extract_bearer_token() -> str | None:
@@ -63,6 +80,10 @@ def _load_user(token: str) -> tuple[dict | None, tuple | None]:
     if not user_id:
         return None, (jsonify({"error": "Invalid token"}), 401)
 
+    cached = _get_cached_role(user_id)
+    if cached is not None:
+        return {"user_id": user_id, "role": cached}, None
+
     try:
         from app.extensions import get_db
         result = (
@@ -99,7 +120,9 @@ def _load_user(token: str) -> tuple[dict | None, tuple | None]:
             logger.exception("Failed to auto-create profile for user_id=%s", user_id)
             return None, (jsonify({"error": "User not found"}), 401)
 
-    return {"user_id": user_id, "role": rows[0].get("role")}, None
+    role = rows[0].get("role")
+    _set_cached_role(user_id, role)
+    return {"user_id": user_id, "role": role}, None
 
 
 def require_auth(f):

@@ -21,12 +21,20 @@ def init_extensions(app) -> None:
             f"{app.config['SUPABASE_URL']}/auth/v1/.well-known/jwks.json",
             cache_keys=True,
         )
+    try:
+        _supabase.storage.create_bucket("pet-photos", options={"public": True})
+    except Exception:
+        # Bucket already exists — ensure it is public
+        try:
+            _supabase.storage.update_bucket("pet-photos", options={"public": True})
+        except Exception:
+            pass
     limiter.init_app(app)
     CORS(
         app,
         origins=app.config.get("CORS_ORIGINS", ["http://localhost:5173"]),
         allow_headers=["Authorization", "Content-Type"],
-        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         supports_credentials=True,
     )
 

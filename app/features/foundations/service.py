@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from app.extensions import get_db
 
@@ -138,6 +138,124 @@ def approve_foundation(foundation_id: str, admin_id: str) -> dict | None:
     )
     rows = result.data or []
     return rows[0] if rows else None
+
+
+def get_my_pets(*, foundation_id: str) -> list[dict]:
+    _PET_SELECT = (
+        "id, name, species, breed, age_months, gender, size, description, "
+        "photos, status, foundation_id, city, created_at, "
+        "vaccinated, sterilized, dewormed, microchipped, health_notes, "
+        "foundations(org_name)"
+    )
+    result = (
+        get_db()
+        .table("pets")
+        .select(_PET_SELECT)
+        .eq("foundation_id", foundation_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return [_format_pet(r) for r in (result.data or [])]
+
+
+def _format_pet(row: dict) -> dict:
+    foundation = row.pop("foundations", None) or {}
+    return {
+        "id": row.get("id"),
+        "name": row.get("name"),
+        "species": row.get("species"),
+        "breed": row.get("breed"),
+        "age_months": row.get("age_months"),
+        "gender": row.get("gender"),
+        "size": row.get("size"),
+        "description": row.get("description"),
+        "photos": row.get("photos") or [],
+        "status": row.get("status"),
+        "foundation_id": row.get("foundation_id"),
+        "foundation_name": foundation.get("org_name", ""),
+        "city": row.get("city"),
+        "created_at": row.get("created_at"),
+        "clinical_record": {
+            "vaccinated": bool(row.get("vaccinated", False)),
+            "sterilized": bool(row.get("sterilized", False)),
+            "dewormed": bool(row.get("dewormed", False)),
+            "microchipped": bool(row.get("microchipped", False)),
+            "health_notes": row.get("health_notes"),
+        },
+    }
+
+
+_FOUNDATION_ADOPTION_SELECT = (
+    "id, pet_id, adopter_id, foundation_id, status, message, created_at, updated_at, "
+    "pets(name, photos), "
+    "profiles!adoption_requests_adopter_id_fkey(full_name, email)"
+)
+
+
+def get_my_adoptions(*, foundation_id: str) -> list[dict]:
+    result = (
+        get_db()
+        .table("adoption_requests")
+        .select(_FOUNDATION_ADOPTION_SELECT)
+        .eq("foundation_id", foundation_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return [_format_foundation_adoption(r) for r in (result.data or [])]
+
+
+def _format_foundation_adoption(row: dict) -> dict:
+    pet = row.pop("pets", None) or {}
+    adopter = row.pop("profiles", None) or {}
+    photos = pet.get("photos") or []
+    return {
+        "id": row.get("id"),
+        "pet_id": row.get("pet_id"),
+        "pet_name": pet.get("name", ""),
+        "pet_photo": photos[0] if photos else None,
+        "adopter_id": row.get("adopter_id"),
+        "adopter_name": adopter.get("full_name", ""),
+        "adopter_email": adopter.get("email", ""),
+        "foundation_id": row.get("foundation_id"),
+        "status": row.get("status"),
+        "message": row.get("message", ""),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+# ── Availability ──────────────────────────────────────────────────────────────
+
+def set_availability(*, foundation_id: str, days: list[dict]) -> None:
+    db = get_db()
+    db.table("foundation_availability") \
+      .delete() \
+      .eq("foundation_id", foundation_id) \
+      .gte("available_date", date.today().isoformat()) \
+      .execute()
+    if days:
+        db.table("foundation_availability").insert([
+            {
+                "foundation_id": foundation_id,
+                "available_date": d["available_date"],
+                "start_time": d["start_time"],
+                "end_time": d["end_time"],
+            }
+            for d in days
+        ]).execute()
+
+
+def get_availability(*, foundation_id: str, from_date: str) -> list[dict]:
+    result = (
+        get_db()
+        .table("foundation_availability")
+        .select("available_date, start_time, end_time")
+        .eq("foundation_id", foundation_id)
+        .gte("available_date", from_date)
+        .order("available_date")
+        .execute()
+    )
+    return result.data or []
 
 
 def reject_foundation(

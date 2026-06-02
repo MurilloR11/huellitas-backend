@@ -1,9 +1,11 @@
 import logging
+import re
+from datetime import date
 
 from flask import Blueprint, g, jsonify, request
 
 from app.extensions import limiter
-from app.shared.middleware.auth import require_admin
+from app.shared.middleware.auth import require_admin, require_auth
 from app.shared.utils.email import send_foundation_approved, send_foundation_rejected
 from app.shared.utils.logger import audit_log
 from . import service
@@ -11,6 +13,83 @@ from . import service
 logger = logging.getLogger(__name__)
 
 foundations_bp = Blueprint("foundations", __name__, url_prefix="/foundations")
+
+
+_DATE_RE  = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+_TIME_RE  = re.compile(r'^\d{2}:\d{2}$')
+
+
+@foundations_bp.post("/me/availability")
+@limiter.limit("30 per minute")
+@require_auth
+def set_availability():
+    if g.user_role != "fundacion":
+        return jsonify({"error": "Forbidden"}), 403
+
+    body = request.get_json(silent=True) or {}
+    days = body.get("days")
+    if not isinstance(days, list):
+        return jsonify({"error": "days must be a list"}), 400
+
+    validated = []
+    for entry in days:
+        d = (entry.get("available_date") or "").strip()
+        st = (entry.get("start_time") or "").strip()
+        et = (entry.get("end_time") or "").strip()
+        if not (_DATE_RE.match(d) and _TIME_RE.match(st) and _TIME_RE.match(et)):
+            return jsonify({"error": f"Invalid entry: {entry}"}), 400
+        if st >= et:
+            return jsonify({"error": f"start_time must be before end_time for {d}"}), 400
+        validated.append({"available_date": d, "start_time": st, "end_time": et})
+
+    try:
+        service.set_availability(foundation_id=g.user_id, days=validated)
+        return jsonify({"message": "Availability updated"}), 200
+    except Exception:
+        logger.exception("Error setting availability for foundation %s", g.user_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@foundations_bp.get("/<foundation_id>/availability")
+@limiter.limit("60 per minute")
+def get_availability(foundation_id):
+    from_date = request.args.get("from_date", date.today().isoformat())
+    if not _DATE_RE.match(from_date):
+        return jsonify({"error": "Invalid from_date format"}), 400
+    try:
+        slots = service.get_availability(foundation_id=foundation_id, from_date=from_date)
+        return jsonify(slots), 200
+    except Exception:
+        logger.exception("Error fetching availability for foundation %s", foundation_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@foundations_bp.get("/me/pets")
+@limiter.limit("30 per minute")
+@require_auth
+def my_pets():
+    if g.user_role != "fundacion":
+        return jsonify({"error": "Forbidden"}), 403
+    try:
+        pets = service.get_my_pets(foundation_id=g.user_id)
+        return jsonify(pets), 200
+    except Exception:
+        logger.exception("Error fetching pets for foundation %s", g.user_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@foundations_bp.get("/me/adoptions")
+@limiter.limit("30 per minute")
+@require_auth
+def my_adoptions():
+    if g.user_role != "fundacion":
+        return jsonify({"error": "Forbidden"}), 403
+    try:
+        adoptions = service.get_my_adoptions(foundation_id=g.user_id)
+        return jsonify(adoptions), 200
+    except Exception:
+        logger.exception("Error fetching adoptions for foundation %s", g.user_id)
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @foundations_bp.get("")
