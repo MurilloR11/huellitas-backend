@@ -5,6 +5,7 @@ from flask import Blueprint, g, jsonify, request
 from app.extensions import limiter
 from app.shared.middleware.auth import require_auth, optional_api_key
 from app.shared.utils.activity import log_activity
+from app.shared.utils.notifications import notify_all_citizens
 from . import service
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,12 @@ def create_pet():
             description=f"Mascota '{body.get('name', '')}' publicada",
             ip_address=request.remote_addr or "unknown",
             metadata={"pet_id": pet.get("id"), "species": body.get("species")},
+        )
+        notify_all_citizens(
+            ntype="new_pet",
+            title="Nueva mascota disponible",
+            body=f"**{pet.get('name', 'Una mascota')}** está disponible para adopción en {pet.get('foundation_name', 'una fundación')}.",
+            metadata={"pet_id": pet.get("id"), "pet_name": pet.get("name"), "foundation_name": pet.get("foundation_name")},
         )
         return jsonify(pet), 201
     except Exception:

@@ -5,6 +5,7 @@ from flask import Blueprint, g, jsonify, request
 from app.extensions import limiter
 from app.shared.middleware.auth import require_auth
 from app.shared.utils.activity import log_activity
+from app.shared.utils.notifications import create_notification, notify_adoption_status
 from . import service
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,15 @@ def create_adoption():
             ip_address=request.remote_addr or "unknown",
             metadata={"pet_id": pet_id, "adoption_id": adoption.get("id")},
         )
+        foundation_id = adoption.get("foundation_id")
+        if foundation_id:
+            create_notification(
+                user_id=foundation_id,
+                ntype="new_adoption_request",
+                title="Nueva solicitud de adopción",
+                body=f"Alguien quiere adoptar a **{adoption.get('pet_name', 'una de tus mascotas')}**. Revisa la solicitud.",
+                metadata={"adoption_id": adoption.get("id"), "pet_id": pet_id, "pet_name": adoption.get("pet_name")},
+            )
         return jsonify(adoption), 201
     except Exception:
         logger.exception("Error creating adoption request")
@@ -146,6 +156,14 @@ def update_adoption_status(adoption_id):
             ip_address=request.remote_addr or "unknown",
             metadata={"adoption_id": adoption_id, "new_status": new_status},
         )
+        adopter_id = result.get("adopter_id")
+        if adopter_id:
+            notify_adoption_status(
+                adopter_id=adopter_id,
+                pet_name=result.get("pet_name", "la mascota"),
+                new_status=new_status,
+                adoption_id=adoption_id,
+            )
         return jsonify(result), 200
     except Exception:
         logger.exception("Error updating adoption %s", adoption_id)

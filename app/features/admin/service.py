@@ -228,6 +228,7 @@ def list_admin_adoptions() -> dict:
             "pet_name":        pet.get("name", ""),
             "pet_species":     pet.get("species", "other"),
             "foundation_name": foundation.get("org_name", ""),
+            "requester_id":    row.get("adopter_id", ""),
             "status":          row.get("status", "pending"),
             "created_at":      row.get("created_at", ""),
             "updated_at":      row.get("updated_at"),
