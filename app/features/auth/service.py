@@ -199,21 +199,30 @@ def verify_backup_code(user_id: str, code: str) -> bool:
 def generate_access_key(user_id: str) -> str:
     db = get_db()
     plain_key = secrets.token_hex(32)
-    db.table("access_keys").upsert(
+    db.table("access_keys").insert(
         {
             "user_id": user_id,
+            "name": "",
+            "prefix": plain_key[:9],
             "key_hash": _hash_code(plain_key),
             "created_at": _now().isoformat(),
             "last_used_at": None,
-        },
-        on_conflict="user_id",
+            "active": True,
+        }
     ).execute()
     return plain_key
 
 
 def get_access_key_status(user_id: str) -> dict:
     db = get_db()
-    result = db.table("access_keys").select("created_at").eq("user_id", user_id).execute()
+    result = (
+        db.table("access_keys")
+        .select("created_at")
+        .eq("user_id", user_id)
+        .eq("active", True)
+        .limit(1)
+        .execute()
+    )
     rows = result.data or []
     if not rows:
         return {"has_key": False, "created_at": None}
@@ -222,25 +231,33 @@ def get_access_key_status(user_id: str) -> dict:
 
 def revoke_access_key(user_id: str) -> None:
     db = get_db()
-    db.table("access_keys").delete().eq("user_id", user_id).execute()
+    db.table("access_keys").update({"active": False}).eq("user_id", user_id).execute()
 
 
 def login_with_access_key(user_id: str, plain_key: str) -> dict | None:
     db = get_db()
     key_hash = _hash_code(plain_key.strip())
 
-    result = db.table("access_keys").select("id, key_hash").eq("user_id", user_id).execute()
+    result = (
+        db.table("access_keys")
+        .select("id, key_hash")
+        .eq("user_id", user_id)
+        .eq("active", True)
+        .execute()
+    )
     rows = result.data or []
-    if not rows or rows[0]["key_hash"] != key_hash:
+    matched = next((r for r in rows if r["key_hash"] == key_hash), None)
+    if not matched:
         return None
 
-    db.table("access_keys").update({"last_used_at": _now().isoformat()}).eq("id", rows[0]["id"]).execute()
+    db.table("access_keys").update({"last_used_at": _now().isoformat()}).eq("id", matched["id"]).execute()
 
     profile_result = db.table("profiles").select("email").eq("id", user_id).execute()
     profile_rows = profile_result.data or []
     if not profile_rows:
         return None
     email = profile_rows[0]["email"]
+
 
     url = current_app.config["SUPABASE_URL"]
     svc_key = current_app.config["SUPABASE_SERVICE_ROLE_KEY"]

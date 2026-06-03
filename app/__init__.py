@@ -28,12 +28,16 @@ def create_app(config_class=Config) -> Flask:
     _configure_logging(app)
     init_extensions(app)
 
+    from app.shared.middleware.call_logger import log_api_call
+    app.after_request(log_api_call)
+
     from app.features.auth.routes import auth_bp
     from app.features.foundations.routes import foundations_bp
     from app.features.pets.routes import pets_bp
     from app.features.adoptions.routes import adoptions_bp
     from app.features.ai.routes import ai_bp
     from app.features.admin.routes import admin_bp
+    from app.features.developer.routes import developer_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(foundations_bp)
@@ -41,6 +45,7 @@ def create_app(config_class=Config) -> Flask:
     app.register_blueprint(adoptions_bp)
     app.register_blueprint(ai_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(developer_bp)
 
     @app.errorhandler(404)
     def not_found(_e):

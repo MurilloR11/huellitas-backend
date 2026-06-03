@@ -3,7 +3,7 @@ import logging
 from flask import Blueprint, g, jsonify, request
 
 from app.extensions import limiter
-from app.shared.middleware.auth import require_auth
+from app.shared.middleware.auth import require_auth, optional_api_key
 from app.shared.utils.activity import log_activity
 from . import service
 
@@ -91,6 +91,7 @@ def upload_photo(pet_id: int):
 
 @pets_bp.get("")
 @limiter.limit("60 per minute")
+@optional_api_key
 def list_pets():
     try:
         page = max(1, int(request.args.get("page", 1)))
@@ -118,6 +119,7 @@ def list_pets():
 
 @pets_bp.get("/by-code/<string:code>")
 @limiter.limit("60 per minute")
+@optional_api_key
 def get_pet_by_code(code: str):
     try:
         pet = service.get_pet_by_code(code)
@@ -131,6 +133,7 @@ def get_pet_by_code(code: str):
 
 @pets_bp.get("/<int:pet_id>")
 @limiter.limit("60 per minute")
+@optional_api_key
 def get_pet(pet_id):
     try:
         pet = service.get_pet_by_id(pet_id)

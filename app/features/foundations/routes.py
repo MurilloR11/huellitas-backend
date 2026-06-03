@@ -5,7 +5,7 @@ from datetime import date
 from flask import Blueprint, g, jsonify, request
 
 from app.extensions import limiter
-from app.shared.middleware.auth import require_admin, require_auth
+from app.shared.middleware.auth import require_admin, require_auth, optional_api_key
 from app.shared.utils.email import send_foundation_approved, send_foundation_rejected
 from app.shared.utils.activity import log_activity
 from app.shared.utils.logger import audit_log
@@ -53,6 +53,7 @@ def set_availability():
 
 @foundations_bp.get("/<foundation_id>/availability")
 @limiter.limit("60 per minute")
+@optional_api_key
 def get_availability(foundation_id):
     from_date = request.args.get("from_date", date.today().isoformat())
     if not _DATE_RE.match(from_date):
@@ -95,6 +96,7 @@ def my_adoptions():
 
 @foundations_bp.get("")
 @limiter.limit("60 per minute")
+@optional_api_key
 def list_foundations():
     try:
         page = max(1, int(request.args.get("page", 1)))
@@ -116,6 +118,7 @@ def list_foundations():
 
 @foundations_bp.get("/<foundation_id>")
 @limiter.limit("60 per minute")
+@optional_api_key
 def get_foundation(foundation_id):
     try:
         foundation = service.get_foundation_by_id_public(foundation_id)

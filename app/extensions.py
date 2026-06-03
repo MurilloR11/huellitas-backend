@@ -33,7 +33,7 @@ def init_extensions(app) -> None:
     CORS(
         app,
         origins=app.config.get("CORS_ORIGINS", ["http://localhost:5173"]),
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "X-API-Key"],
         methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         supports_credentials=True,
     )

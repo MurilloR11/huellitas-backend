@@ -6,7 +6,7 @@ from app.extensions import get_db
 logger = logging.getLogger(__name__)
 
 _FOUNDATION_SELECT = (
-    "id, org_name, municipio, phone, description, logo, instagram, status, "
+    "id, org_name, municipio, phone, status, "
     "profiles!foundations_id_fkey(email, created_at)"
 )
 
@@ -83,11 +83,8 @@ def _format_foundation(row: dict, active_count: int, adopted_count: int) -> dict
         "id": row.get("id"),
         "name": row.get("org_name", ""),
         "city": row.get("municipio", ""),
-        "description": row.get("description", ""),
-        "logo": row.get("logo"),
         "contact_email": profile.get("email", ""),
         "contact_phone": row.get("phone"),
-        "instagram": row.get("instagram"),
         "active_pets_count": active_count,
         "adopted_pets_count": adopted_count,
         "created_at": profile.get("created_at"),

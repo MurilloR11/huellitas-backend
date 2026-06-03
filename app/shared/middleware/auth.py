@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import time
 from functools import wraps
@@ -29,6 +30,63 @@ def _extract_bearer_token() -> str | None:
     if header.startswith("Bearer "):
         return header[7:].strip() or None
     return None
+
+
+def _extract_api_key() -> str | None:
+    return request.headers.get("X-API-Key", "").strip() or None
+
+
+def _load_user_from_api_key(plain_key: str) -> tuple[dict | None, tuple | None]:
+    key_hash = hashlib.sha256(plain_key.encode()).hexdigest()
+
+    try:
+        from app.extensions import get_db
+        db = get_db()
+        result = (
+            db.table("access_keys")
+            .select("id, user_id")
+            .eq("key_hash", key_hash)
+            .eq("active", True)
+            .limit(1)
+            .execute()
+        )
+    except Exception:
+        logger.exception("DB error while validating API key")
+        return None, (jsonify({"error": "Authentication failed"}), 401)
+
+    rows = result.data or []
+    if not rows:
+        return None, (jsonify({"error": "Invalid API key"}), 401)
+
+    row = rows[0]
+    user_id: str = row["user_id"]
+    key_id: str = row["id"]
+
+    try:
+        from datetime import datetime, timezone
+        from app.extensions import get_db as _get_db
+        _get_db().table("access_keys").update(
+            {"last_used_at": datetime.now(timezone.utc).isoformat()}
+        ).eq("id", key_id).execute()
+    except Exception:
+        logger.warning("Failed to update last_used_at for key %s", key_id)
+
+    cached = _get_cached_role(user_id)
+    if cached is not None:
+        return {"user_id": user_id, "role": cached, "key_id": key_id}, None
+
+    try:
+        from app.extensions import get_db as _get_db2
+        role_result = _get_db2().table("profiles").select("role").eq("id", user_id).execute()
+        role_rows = role_result.data or []
+        if not role_rows:
+            return None, (jsonify({"error": "User not found"}), 401)
+        role = role_rows[0].get("role")
+        _set_cached_role(user_id, role)
+        return {"user_id": user_id, "role": role, "key_id": key_id}, None
+    except Exception:
+        logger.exception("DB error loading role for user %s", user_id)
+        return None, (jsonify({"error": "Authentication failed"}), 401)
 
 
 def _decode_token(token: str) -> dict:
@@ -125,23 +183,46 @@ def _load_user(token: str) -> tuple[dict | None, tuple | None]:
     return {"user_id": user_id, "role": role}, None
 
 
+def optional_api_key(f):
+    """If X-API-Key is present and valid, populate g.api_key_id / g.user_id / g.user_role.
+    Never blocks the request — public endpoints stay public.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        api_key = _extract_api_key()
+        if api_key:
+            user, err = _load_user_from_api_key(api_key)
+            if user and not err:
+                g.user_id   = user["user_id"]
+                g.user_role = user["role"]
+                g.api_key_id = user.get("key_id")
+        return f(*args, **kwargs)
+    return decorated
+
+
 def require_auth(f):
-    """Verify the Supabase JWT. Any authenticated user is allowed.
+    """Verify auth via X-API-Key header or Supabase JWT Bearer token.
 
     Sets g.user_id and g.user_role on success.
     """
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = _extract_bearer_token()
-        if not token:
-            return jsonify({"error": "Authentication required"}), 401
+        api_key = _extract_api_key()
+        if api_key:
+            user, err = _load_user_from_api_key(api_key)
+        else:
+            token = _extract_bearer_token()
+            if not token:
+                return jsonify({"error": "Authentication required"}), 401
+            user, err = _load_user(token)
 
-        user, err = _load_user(token)
         if err:
             return err
 
         g.user_id = user["user_id"]
         g.user_role = user["role"]
+        if api_key:
+            g.api_key_id = user.get("key_id")
         return f(*args, **kwargs)
 
     return decorated
