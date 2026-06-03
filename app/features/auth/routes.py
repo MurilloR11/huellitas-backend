@@ -4,11 +4,39 @@ from flask import Blueprint, g, jsonify, request
 
 from app.extensions import limiter
 from app.shared.middleware.auth import require_auth
+from app.shared.utils.activity import log_activity
 from . import service
 
 logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
+
+
+_VALID_AUTH_ACTIONS = {"login", "logout"}
+
+_AUTH_DESCRIPTIONS = {
+    "login":  "Inicio de sesión",
+    "logout": "Cierre de sesión",
+}
+
+
+@auth_bp.post("/activity")
+@limiter.limit("20 per minute")
+@require_auth
+def track_activity():
+    body = request.get_json(silent=True) or {}
+    action = (body.get("action") or "").strip()
+
+    if action not in _VALID_AUTH_ACTIONS:
+        return jsonify({"error": "action must be 'login' or 'logout'"}), 400
+
+    log_activity(
+        user_id=g.user_id,
+        action=action,
+        description=_AUTH_DESCRIPTIONS[action],
+        ip_address=request.remote_addr or "unknown",
+    )
+    return jsonify({"ok": True}), 200
 
 
 @auth_bp.get("/me")

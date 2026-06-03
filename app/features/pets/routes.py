@@ -4,6 +4,7 @@ from flask import Blueprint, g, jsonify, request
 
 from app.extensions import limiter
 from app.shared.middleware.auth import require_auth
+from app.shared.utils.activity import log_activity
 from . import service
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,13 @@ def create_pet():
         pet = service.create_pet(foundation_id=g.user_id, data=body)
         if pet is None:
             return jsonify({"error": "Foundation not found or not approved"}), 403
+        log_activity(
+            user_id=g.user_id,
+            action="pet_published",
+            description=f"Mascota '{body.get('name', '')}' publicada",
+            ip_address=request.remote_addr or "unknown",
+            metadata={"pet_id": pet.get("id"), "species": body.get("species")},
+        )
         return jsonify(pet), 201
     except Exception:
         logger.exception("Error creating pet")

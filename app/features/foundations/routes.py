@@ -7,6 +7,7 @@ from flask import Blueprint, g, jsonify, request
 from app.extensions import limiter
 from app.shared.middleware.auth import require_admin, require_auth
 from app.shared.utils.email import send_foundation_approved, send_foundation_rejected
+from app.shared.utils.activity import log_activity
 from app.shared.utils.logger import audit_log
 from . import service
 
@@ -171,6 +172,13 @@ def approve(foundation_id):
             ip_address=request.remote_addr or "unknown",
             metadata={"org_name": org_name},
         )
+        log_activity(
+            user_id=g.user_id,
+            action="foundation_approved",
+            description=f"Fundación '{org_name}' aprobada",
+            ip_address=request.remote_addr or "unknown",
+            metadata={"foundation_id": fid, "org_name": org_name},
+        )
 
         return jsonify({"message": "Foundation approved successfully"}), 200
 
@@ -218,6 +226,13 @@ def reject(foundation_id):
             target_id=fid,
             ip_address=request.remote_addr or "unknown",
             metadata={"org_name": org_name, "reason": reason},
+        )
+        log_activity(
+            user_id=g.user_id,
+            action="foundation_rejected",
+            description=f"Fundación '{org_name}' rechazada",
+            ip_address=request.remote_addr or "unknown",
+            metadata={"foundation_id": fid, "org_name": org_name, "reason": reason},
         )
 
         return jsonify({"message": "Foundation rejected successfully"}), 200

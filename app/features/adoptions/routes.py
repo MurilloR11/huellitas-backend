@@ -4,6 +4,7 @@ from flask import Blueprint, g, jsonify, request
 
 from app.extensions import limiter
 from app.shared.middleware.auth import require_auth
+from app.shared.utils.activity import log_activity
 from . import service
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,13 @@ def create_adoption():
         )
         if adoption is None:
             return jsonify({"error": "Pet not found or not available"}), 404
+        log_activity(
+            user_id=g.user_id,
+            action="adoption_request",
+            description=f"Solicitud de adopción enviada para mascota #{pet_id}",
+            ip_address=request.remote_addr or "unknown",
+            metadata={"pet_id": pet_id, "adoption_id": adoption.get("id")},
+        )
         return jsonify(adoption), 201
     except Exception:
         logger.exception("Error creating adoption request")
@@ -131,6 +139,13 @@ def update_adoption_status(adoption_id):
         )
         if result is None:
             return jsonify({"error": "Adoption request not found or not yours"}), 404
+        log_activity(
+            user_id=g.user_id,
+            action="adoption_status_updated",
+            description=f"Solicitud #{adoption_id} marcada como '{new_status}'",
+            ip_address=request.remote_addr or "unknown",
+            metadata={"adoption_id": adoption_id, "new_status": new_status},
+        )
         return jsonify(result), 200
     except Exception:
         logger.exception("Error updating adoption %s", adoption_id)
@@ -180,6 +195,13 @@ def schedule_visit(adoption_id):
         )
         if result is None:
             return jsonify({"error": "Adoption not found, not approved, or visit already scheduled"}), 409
+        log_activity(
+            user_id=g.user_id,
+            action="visit_scheduled",
+            description=f"Visita agendada para solicitud #{adoption_id}",
+            ip_address=request.remote_addr or "unknown",
+            metadata={"adoption_id": adoption_id, "scheduled_at": scheduled_at},
+        )
         return jsonify(result), 201
     except Exception:
         logger.exception("Error scheduling visit for adoption %s", adoption_id)
