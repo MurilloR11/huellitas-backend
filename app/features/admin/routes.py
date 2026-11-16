@@ -1,3 +1,4 @@
+import json
 import logging
 
 from flask import Blueprint, g, jsonify, request
@@ -25,6 +26,33 @@ _VALID_ACTIVITY_ACTIONS = {
     "all",
 }
 _VALID_DATE_RANGES = {"today", "week", "month", "all"}
+
+
+def _mask_email(value: str) -> str:
+    """ana.perez@gmail.com -> a***@gmail.com"""
+    if not isinstance(value, str) or "@" not in value:
+        return value
+    local, domain = value.split("@", 1)
+    return f"{local[:1]}***@{domain}"
+
+
+def _mask_emails(data):
+    if isinstance(data, dict):
+        return {
+            k: _mask_email(v) if "email" in k.lower() and isinstance(v, str) else _mask_emails(v)
+            for k, v in data.items()
+        }
+    if isinstance(data, list):
+        return [_mask_emails(item) for item in data]
+    return data
+
+
+@admin_bp.after_request
+def _hide_emails_for_demo(response):
+    """La cuenta admin de demo no ve los correos reales de los usuarios."""
+    if g.get("is_demo") and response.is_json:
+        response.set_data(json.dumps(_mask_emails(response.get_json()), ensure_ascii=False))
+    return response
 
 
 @admin_bp.get("/stats")

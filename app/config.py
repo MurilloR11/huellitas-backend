@@ -30,6 +30,9 @@ class Config:
         if o.strip()
     ]
     RATELIMIT_STORAGE_URI: str = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
+    # IDs (UUID) de las cuentas de demo públicas, separados por coma.
+    # Estas cuentas solo pueden leer: cualquier escritura responde 403.
+    DEMO_USER_IDS: str = os.environ.get("DEMO_USER_IDS", "")
     TESTING: bool = False
 
     @classmethod

@@ -25,6 +25,38 @@ def _set_cached_role(user_id: str, role: str) -> None:
     _ROLE_CACHE[user_id] = (role, time.monotonic() + _CACHE_TTL)
 
 
+# ---------------------------------------------------------------------------
+# Modo demo: cuentas públicas de solo lectura
+# ---------------------------------------------------------------------------
+_DEMO_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+# Escrituras inofensivas permitidas a las cuentas demo (registro de login/logout).
+_DEMO_ALLOWED_WRITES = {("POST", "/auth/activity")}
+
+
+def _demo_user_ids() -> set[str]:
+    raw = current_app.config.get("DEMO_USER_IDS") or ""
+    return {uid.strip() for uid in raw.split(",") if uid.strip()}
+
+
+def is_demo_user(user_id: str | None) -> bool:
+    return bool(user_id) and user_id in _demo_user_ids()
+
+
+def _demo_write_blocked(user_id: str):
+    """Marca g.is_demo y devuelve un 403 si una cuenta demo intenta escribir."""
+    if not is_demo_user(user_id):
+        return None
+    g.is_demo = True
+    if request.method in _DEMO_SAFE_METHODS:
+        return None
+    if (request.method, request.path.rstrip("/")) in _DEMO_ALLOWED_WRITES:
+        return None
+    return jsonify({
+        "error": "Modo demo: esta cuenta es de solo lectura",
+        "demo": True,
+    }), 403
+
+
 def _extract_bearer_token() -> str | None:
     header = request.headers.get("Authorization", "")
     if header.startswith("Bearer "):
@@ -219,6 +251,10 @@ def require_auth(f):
         if err:
             return err
 
+        blocked = _demo_write_blocked(user["user_id"])
+        if blocked:
+            return blocked
+
         g.user_id = user["user_id"]
         g.user_role = user["role"]
         if api_key:
@@ -242,6 +278,10 @@ def require_admin(f):
 
         if user["role"] != "admin":
             return jsonify({"error": "Forbidden"}), 403
+
+        blocked = _demo_write_blocked(user["user_id"])
+        if blocked:
+            return blocked
 
         g.user_id = user["user_id"]
         g.user_role = user["role"]
